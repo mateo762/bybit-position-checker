@@ -100,10 +100,10 @@ def check_and_close_position(position, current_price, mongo, bybit):
             quantity_to_buy = abs(position_amount)
             logger.info(f"Closing short position by buying {quantity_to_buy} {symbol}")
             time.sleep(1)
-            close_position(position, position['accountNumber'], position['lastTransactionNumber'] + 1, position['status'])
+            #close_position(position, position['accountNumber'], position['lastTransactionNumber'] + 1, position['status'])
 
         else:  # Long position
             logger.info(f"Closing long position by selling {position_amount} {symbol}")
             time.sleep(1)
-            close_position(position, position['accountNumber'], position['lastTransactionNumber'] + 1, position['status'])
+            #close_position(position, position['accountNumber'], position['lastTransactionNumber'] + 1, position['status'])
         bybit.get_all_open_positions(force_update=True)
