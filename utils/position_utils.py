@@ -54,7 +54,7 @@ def check_and_close_position(position, current_price, mongo, bybit):
     if position_amount == 0:
         return
 
-    position_type = "Short" if position_amount < 0 else "Long"
+    position_type = "Short" if position['data']['side'] == 'Sell' else "Long"
     would_close = False
     threshold_low = 0
     threshold_high = 0
