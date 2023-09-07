@@ -43,7 +43,7 @@ def close_position(position, account_number, last_transaction_number, position_s
         orderType="Market",  # Close at market price
         qty=qty,
         reduceOnly=True,  # Ensure this order only reduces the position
-        orderLinkId=f"{account_number}_{symbol}_{last_transaction_number}_{position_status}"
+        orderLinkId=f"{account_number}_{symbol}_{last_transaction_number}_{position_status}_safety"
     )
 
     print(response)
