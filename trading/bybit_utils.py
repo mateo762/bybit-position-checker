@@ -22,9 +22,6 @@ def generate_signature(secret, data):
     return hmac.new(bytes(secret, 'latin-1'), msg=bytes(data, 'latin-1'), digestmod=hashlib.sha256).hexdigest()
 
 
-
-
-
 class BybitUtils:
     def __init__(self, api_key, api_secret, mongo):
         self.mongo = mongo
@@ -98,7 +95,7 @@ class BybitUtils:
             logger.info("Start refreshing cache...")
 
             positions = self.client.LinearPositions.LinearPositions_myPosition().result()[0]['result']
-            fresh_positions_cache = [position for position in positions if float(position['positionAmt']) != 0]
+            fresh_positions_cache = [position for position in positions if float(position['data']['size']) != 0]
             cache_before_copy = self.positions_cache
 
             cache_dict = {pos['order_id']: pos for pos in self.positions_cache} if self.positions_cache else {}
@@ -125,7 +122,8 @@ class BybitUtils:
                 else:
                     position = cache_dict[position['order_id']]
                     if position['status'] in ['C_SL', 'C_13', 'C_23', 'C_TP3']:
-                        logger.info(f"Cache ignoring the following {position['data']['symbol']} position: {position}, status: {position['status']}")
+                        logger.info(
+                            f"Cache ignoring the following {position['data']['symbol']} position: {position}, status: {position['status']}")
                         continue
 
                 new_cache_dict[position['order_id']] = position
