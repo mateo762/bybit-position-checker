@@ -22,32 +22,7 @@ def generate_signature(secret, data):
     return hmac.new(bytes(secret, 'latin-1'), msg=bytes(data, 'latin-1'), digestmod=hashlib.sha256).hexdigest()
 
 
-def close_position(position, account_number, last_transaction_number, position_status):
-    # Initialize the Bybit session
-    session = HTTP(
-        testnet=False,  # Set to False if you're using the live environment
-        api_key=os.getenv("BYBIT_API_KEY"),
-        api_secret=os.getenv("BYBIT_API_SECRET"),
-    )
 
-    # Extract position details
-    symbol = position['data']['symbol']
-    side = "Sell" if position['data']['side'] == "Buy" else "Buy"
-    qty = str(position['data']['size'])
-
-    # Place the order to close the position
-    response = session.place_order(
-        category="linear",  # Since it's a USDT perpetual future
-        symbol=symbol,
-        side=side,
-        orderType="Market",  # Close at market price
-        qty=qty,
-        reduceOnly=True,  # Ensure this order only reduces the position
-        orderLinkId=f"{account_number}_{symbol}_{last_transaction_number}_{position_status}_safety"
-    )
-
-    print(response)
-    return response
 
 
 class BybitUtils:
@@ -70,6 +45,40 @@ class BybitUtils:
         positions = self.client.Positions.Positions_myPosition().result()[0]['result']
         return next((item for item in positions if item["symbol"] == symbol), None)
 
+    def close_position(self, position, account_number, last_transaction_number, position_status):
+        # Initialize the Bybit session
+        session = HTTP(
+            testnet=False,  # Set to False if you're using the live environment
+            api_key=os.getenv("BYBIT_API_KEY"),
+            api_secret=os.getenv("BYBIT_API_SECRET"),
+        )
+
+        # Extract position details
+        symbol = position['data']['symbol']
+        transaction_id = position['transaction_id']
+        position = self.get_position_for_symbol(symbol)
+        flag_closing = self.mongo.get_transaction_state(transaction_id)
+        logger.info(f"Trying to close, position: {position}, closing: {flag_closing}")
+        if position and not flag_closing:
+            side = "Sell" if position['data']['side'] == "Buy" else "Buy"
+            qty = str(position['data']['size'])
+
+            # Place the order to close the position
+            response = session.place_order(
+                category="linear",  # Since it's a USDT perpetual future
+                symbol=symbol,
+                side=side,
+                orderType="Market",  # Close at market price
+                qty=qty,
+                reduceOnly=True,  # Ensure this order only reduces the position
+                orderLinkId=f"{account_number}_{symbol}_{last_transaction_number}_{position_status}_safety"
+            )
+
+            print(response)
+            return response
+        else:
+            logger.info(f"No long position for {symbol}. No action taken")
+
     def close_short_position(self, symbol, quantity, account_number, last_transaction_number, position_status):
         """
         Close a short position by buying.
@@ -86,17 +95,51 @@ class BybitUtils:
         cache_duration = now - self.last_cache_update
 
         if not self.positions_cache or cache_duration.total_seconds() > 60 or force_update:
+            logger.info("Start refreshing cache...")
+
             positions = self.client.LinearPositions.LinearPositions_myPosition().result()[0]['result']
-            self.positions_cache = [position for position in positions if float(position['data']['size']) != 0]
-            self.last_cache_update = now
-            for position in self.positions_cache:
-                print(position)
+            fresh_positions_cache = [position for position in positions if float(position['positionAmt']) != 0]
+            cache_before_copy = self.positions_cache
+
+            cache_dict = {pos['order_id']: pos for pos in self.positions_cache} if self.positions_cache else {}
+
+            new_cache_dict = {}
+
+            for position in fresh_positions_cache:
                 transaction = self.mongo.get_most_recent_transaction_for_symbol(position['data']['symbol'],
-                                                                                ObjectId('63dc0d4d04fe7e634851ff77'))
-                position['orderParams'] = self.mongo.get_order_for_transaction(transaction['order_id'])
-                position['accountNumber'], position[
-                    'lastTransactionNumber'] = self.mongo.get_account_and_transaction_number(transaction['account_id'])
-                position['status'] = 'OPEN'
+                                                                                ObjectId('64d623cafa0a150e2234a500'))
+                position['order_id'] = transaction['order_id']
+
+                # Check if 'order_id' already exists in the cache
+                if position['order_id'] not in cache_dict:
+                    position['transaction_id'] = transaction['_id']
+                    position['orderParams'] = self.mongo.get_order_for_transaction(transaction['order_id'])
+                    position['accountNumber'], position[
+                        'lastTransactionNumber'] = self.mongo.get_account_and_transaction_number(
+                        transaction['account_id'])
+                    position['status'] = 'OPEN'
+                    logger.info(f"Adding new {position['symbol']} position to cache: {position}")
+
+                    # Add to the dictionary
+                    cache_dict[position['order_id']] = position
+                else:
+                    position = cache_dict[position['order_id']]
+                    if position['status'] in ['C_SL', 'C_13', 'C_23', 'C_TP3']:
+                        logger.info(f"Cache ignoring the following {position['data']['symbol']} position: {position}, status: {position['status']}")
+                        continue
+
+                new_cache_dict[position['order_id']] = position
+
+            self.positions_cache = list(new_cache_dict.values())
+            self.last_cache_update = now
+
+            if force_update:
+                logger.info(
+                    f"Forced refresh cache, positions fetched: {fresh_positions_cache}, cache before: {cache_before_copy}, cache after: {self.positions_cache}")
+            else:
+                logger.info(
+                    f"Refresh cache, positions fetched: {fresh_positions_cache}, cache before: {cache_before_copy}, cache after: {self.positions_cache}")
+
             # If there are no open positions, wait for 2 seconds
             if not self.positions_cache:
                 time.sleep(2)
