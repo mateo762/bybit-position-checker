@@ -115,7 +115,7 @@ class BybitUtils:
                         'lastTransactionNumber'] = self.mongo.get_account_and_transaction_number(
                         transaction['account_id'])
                     position['status'] = 'OPEN'
-                    logger.info(f"Adding new {position['symbol']} position to cache: {position}")
+                    logger.info(f"Adding new {position['data']['symbol']} position to cache: {position}")
 
                     # Add to the dictionary
                     cache_dict[position['order_id']] = position
