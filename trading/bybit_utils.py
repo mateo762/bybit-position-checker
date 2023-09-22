@@ -104,7 +104,7 @@ class BybitUtils:
 
             for position in fresh_positions_cache:
                 transaction = self.mongo.get_most_recent_transaction_for_symbol(position['data']['symbol'],
-                                                                                ObjectId('64d623cafa0a150e2234a500'))
+                                                                                ObjectId('63dc0d4d04fe7e634851ff77'))
                 position['order_id'] = transaction['order_id']
 
                 # Check if 'order_id' already exists in the cache
