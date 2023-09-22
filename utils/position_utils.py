@@ -1,7 +1,6 @@
 from bson.objectid import ObjectId
 from utils.email_module import send_email
 from utils.logger_module import setup_logger
-from trading.bybit_utils import close_position
 import time
 
 logger = setup_logger(__name__, 'my_app.log')
